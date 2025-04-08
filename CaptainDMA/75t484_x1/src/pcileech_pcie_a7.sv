@@ -46,7 +46,8 @@ module pcileech_pcie_a7(
     IfAXIS128               tlps_static();       // static tlp transmit from cfg->tlp
     wire [15:0]             pcie_id;
     wire                    user_lnk_up;
-    
+
+
     // system interface
     wire pcie_clk_c;
     wire clk_pcie;
@@ -65,11 +66,13 @@ module pcileech_pcie_a7(
     always @ ( posedge pcie_clk_c )
         tickcount64_pcie_refclk <= tickcount64_pcie_refclk + 1;
     assign led_state = user_lnk_up || tickcount64_pcie_refclk[25];
-    
+
+
+
     // ----------------------------------------------------------------------------
     // PCIe CFG RX/TX <--> FIFO below
     // ----------------------------------------------------------------------------
-    
+    wire [31:0] base_address_register;//anpanman
     pcileech_pcie_cfg_a7 i_pcileech_pcie_cfg_a7(
         .rst                        ( rst_subsys                ),
         .clk_sys                    ( clk_sys                   ),
@@ -77,7 +80,8 @@ module pcileech_pcie_a7(
         .dfifo                      ( dfifo_cfg                 ),        
         .ctx                        ( ctx                       ),
         .tlps_static                ( tlps_static.source        ),
-        .pcie_id                    ( pcie_id                   )   // -> [15:0]
+        .pcie_id                    ( pcie_id                   ),   // -> [15:0]
+        .base_address_register      ( base_address_register     )//anpanman
     );
     
     // ----------------------------------------------------------------------------
@@ -100,7 +104,8 @@ module pcileech_pcie_a7(
         .tlps_rx                    ( tlps_rx.sink_lite         ),
         .tlps_static                ( tlps_static.sink          ),
         .dshadow2fifo               ( dshadow2fifo              ),
-        .pcie_id                    ( pcie_id                   )   // <- [15:0]
+        .pcie_id                    ( pcie_id                   ),   // <- [15:0]
+        .base_address_register      ( base_address_register     )//anpanman
     );
     
     pcileech_tlps128_dst64 i_pcileech_tlps128_dst64(
