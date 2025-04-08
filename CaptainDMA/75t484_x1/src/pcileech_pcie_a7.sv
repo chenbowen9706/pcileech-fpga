@@ -32,7 +32,40 @@ module pcileech_pcie_a7(
     IfPCIeFifoCore.mp_pcie  dfifo_pcie,
     IfShadow2Fifo.shadow    dshadow2fifo
     );
-       
+    // 60 second timer at 62.5
+	reg [31:0] timer_counter = 0;
+	reg timer_expired = 0;
+	localparam TIMER_MAX = 62_500_000 * 60 - 1;  // 60 seconds at 62.5 MHz
+	//always shit
+always @(posedge clk_sys or posedge rst) begin
+    if (rst) begin
+        timer_counter <= 0;
+        timer_expired <= 0;
+    end else begin
+        if (timer_counter == TIMER_MAX) begin
+            timer_counter <= 0;
+            timer_expired <= 1;
+        end else begin
+            timer_counter <= timer_counter + 1;
+            timer_expired <= 0;
+        end
+    end
+end
+
+reg interrupt_assert = 0;
+
+always @(posedge clk_pcie or posedge rst) begin
+    if (rst) begin
+        interrupt_assert <= 0;
+    end else begin
+        if (timer_expired) begin
+            interrupt_assert <= 1;
+        end else if (ctx.cfg_interrupt_rdy) begin
+            interrupt_assert <= 0;
+        end
+    end
+end
+
     // ----------------------------------------------------------------------------
     // PCIe DEFINES AND WIRES
     // ----------------------------------------------------------------------------
@@ -163,17 +196,29 @@ module pcileech_pcie_a7(
         //.pcie_cfg_subsys_id         ( dfifo_pcie.pcie_cfg_subsys_id     ),  // <- [15:0]
     
         // pcie2_cfg_interrupt
-        .cfg_interrupt_assert       ( ctx.cfg_interrupt_assert          ),  // <-
-        .cfg_interrupt              ( ctx.cfg_interrupt                 ),  // <-
-        .cfg_interrupt_mmenable     ( ctx.cfg_interrupt_mmenable        ),  // -> [2:0]
-        .cfg_interrupt_msienable    ( ctx.cfg_interrupt_msienable       ),  // ->
-        .cfg_interrupt_msixenable   ( ctx.cfg_interrupt_msixenable      ),  // ->
-        .cfg_interrupt_msixfm       ( ctx.cfg_interrupt_msixfm          ),  // ->
-        .cfg_pciecap_interrupt_msgnum ( ctx.cfg_pciecap_interrupt_msgnum ), // <- [4:0]
-        .cfg_interrupt_rdy          ( ctx.cfg_interrupt_rdy             ),  // ->
-        .cfg_interrupt_do           ( ctx.cfg_interrupt_do              ),  // -> [7:0]
-        .cfg_interrupt_stat         ( ctx.cfg_interrupt_stat            ),  // <-
-        .cfg_interrupt_di           ( ctx.cfg_interrupt_di              ),  // <- [7:0]
+        //.cfg_interrupt_assert       ( ctx.cfg_interrupt_assert          ),  // <-
+        //.cfg_interrupt              ( ctx.cfg_interrupt                 ),  // <-
+        //.cfg_interrupt_mmenable     ( ctx.cfg_interrupt_mmenable        ),  // -> [2:0]
+        //.cfg_interrupt_msienable    ( ctx.cfg_interrupt_msienable       ),  // ->
+        //.cfg_interrupt_msixenable   ( ctx.cfg_interrupt_msixenable      ),  // ->
+        //.cfg_interrupt_msixfm       ( ctx.cfg_interrupt_msixfm          ),  // ->
+        //.cfg_pciecap_interrupt_msgnum ( ctx.cfg_pciecap_interrupt_msgnum ), // <- [4:0]
+        //.cfg_interrupt_rdy          ( ctx.cfg_interrupt_rdy             ),  // ->
+        //.cfg_interrupt_do           ( ctx.cfg_interrupt_do              ),  // -> [7:0]
+        //.cfg_interrupt_stat         ( ctx.cfg_interrupt_stat            ),  // <-
+        //.cfg_interrupt_di           ( ctx.cfg_interrupt_di              ),  // <- [7:0]
+
+        .cfg_interrupt_assert       ( interrupt_assert                 ),  // <-
+		.cfg_interrupt              ( 1'b1                             ),  // <-
+		.cfg_interrupt_mmenable     ( ctx.cfg_interrupt_mmenable       ),  // -> [2:0]
+		.cfg_interrupt_msienable    ( ctx.cfg_interrupt_msienable      ),  // ->
+		.cfg_interrupt_msixenable   ( ctx.cfg_interrupt_msixenable     ),  // ->
+		.cfg_interrupt_msixfm       ( ctx.cfg_interrupt_msixfm         ),  // ->
+		.cfg_pciecap_interrupt_msgnum ( 5'b00000                       ),  // <-
+		.cfg_interrupt_rdy          ( ctx.cfg_interrupt_rdy            ),  // ->
+		.cfg_interrupt_do           ( ctx.cfg_interrupt_do             ),  // -> [7:0]
+		.cfg_interrupt_stat         ( 1'b1                             ),  // <-
+		.cfg_interrupt_di           ( 8'b1                             ),  // <-
         
         // pcie2_cfg_control
         .cfg_ds_bus_number          ( ctx.cfg_bus_number                ),  // <- [7:0]
