@@ -62,7 +62,7 @@ module pcileech_tlps128_cfgspace_shadow(
     // (1) PCIe (if enabled), (2) USB, (3) INTERNAL.
     // Collisions will be discarded (it's assumed that they'll be very rare)
     // ----------------------------------------------------------------------------
-    wire            bram_wr_1_tlp = pcie_rx_wren & dshadow2fifo.cfgtlp_en;
+    wire            bram_wr_1_tlp = pcie_rx_wren;
     wire            bram_wr_2_usb = ~bram_wr_1_tlp & usb_rx_wren;
     wire [3:0]      bram_wr_be = bram_wr_1_tlp ? (dshadow2fifo.cfgtlp_wren ? pcie_rx_be : 4'b0000) : (bram_wr_2_usb ? usb_rx_be : 4'b0000);
     wire [31:0]     bram_wr_data = bram_wr_1_tlp ? pcie_rx_data : (bram_wr_2_usb ? usb_rx_data : 32'h00000000);
