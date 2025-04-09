@@ -40,28 +40,30 @@ module pcileech_pcie_a7(
     reg cfg_int_valid;
     wire cfg_int_ready = ctx.cfg_interrupt_rdy;
     reg cfg_int_stat;
-    reg [31:0] interrupt_counter = 0;
+
    always @ ( posedge clk_pcie ) begin
    if ( rst ) begin
-       cfg_int_valid <= 1'b0;
-       cfg_msg_num <= 5'b0;
-       cfg_int_assert <= 1'b0;
-       cfg_int_di <= 8'b0;
-       cfg_int_stat <= 1'b0;
+       cfg_int_valid <= ctx.cfg_interrupt;
+       cfg_msg_num <= ctx.cfg_pciecap_interrupt_msgnum;
+       cfg_int_assert <= ctx.cfg_interrupt_assert;
+       cfg_int_di <= ctx.cfg_interrupt_di;
+       cfg_int_stat <= ctx.cfg_interrupt_stat;
    end else if (cfg_int_ready && cfg_int_valid) begin
-       cfg_int_valid <= 1'b0;
-       cfg_msg_num <= 5'b0;
-       cfg_int_assert <= 1'b0;
-       cfg_int_di <= 8'b0;
-       cfg_int_stat <= 1'b0;
+       cfg_int_valid <= ctx.cfg_interrupt;
+       cfg_msg_num <= ctx.cfg_pciecap_interrupt_msgnum;
+       cfg_int_assert <= ctx.cfg_interrupt_assert;
+       cfg_int_di <= ctx.cfg_interrupt_di;
+       cfg_int_stat <= ctx.cfg_interrupt_stat;
    end else if (o_int) begin
        cfg_int_valid <= 1'b1;
        cfg_int_assert <= 1'b1;
-       cfg_int_stat <= 1'b1;
-       cfg_int_di <= 8'h01; // Puedes ajustar este valor seg�n sea necesario
-       cfg_msg_num <= 5'b00000; // Ajusta seg�n sea necesario
+       cfg_int_stat <= ctx.cfg_interrupt_stat;
+       cfg_int_di <= ctx.cfg_interrupt_di;
+       cfg_msg_num <= 5'b00000;
    end
 end
+
+
 time int_cnt = 0;
 always @ ( posedge clk_pcie ) begin
    if (rst) begin
