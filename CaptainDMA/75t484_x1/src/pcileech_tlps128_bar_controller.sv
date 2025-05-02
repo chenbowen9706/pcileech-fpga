@@ -798,18 +798,81 @@ module pcileech_bar_impl_zerowrite4k(
 
 endmodule
 
-/*	{ PROC_THERMAL_MMIO_TJMAX, 0x599c, 16, 0xff },
-	{ PROC_THERMAL_MMIO_PP0_TEMP, 0x597c, 0, 0xff },
-	{ PROC_THERMAL_MMIO_PP1_TEMP, 0x5980, 0, 0xff },
-	{ PROC_THERMAL_MMIO_PKG_TEMP, 0x5978, 0, 0xff },
-	{ PROC_THERMAL_MMIO_THRES_0, 0x5820, 8, 0x7F },
-	{ PROC_THERMAL_MMIO_THRES_1, 0x5820, 16, 0x7F },
-	{ PROC_THERMAL_MMIO_INT_ENABLE_0, 0x5820, 15, 0x01 },
-	{ PROC_THERMAL_MMIO_INT_ENABLE_1, 0x5820, 23, 0x01 },
-	{ PROC_THERMAL_MMIO_INT_STATUS_0, 0x7200, 6, 0x01 },
-	{ PROC_THERMAL_MMIO_INT_STATUS_1, 0x7200, 8, 0x01 },
-*/
+
 module pcileech_bar_impl_bar(
+    input               rst,
+    input               clk,
+    // interrupt enable
+    output  wire        int_enable,
+    // incoming BAR writes:
+    input [31:0]        wr_addr,
+    input [3:0]         wr_be,
+    input [31:0]        wr_data,
+    input               wr_valid,
+    // incoming BAR reads:
+    input  [87:0]       rd_req_ctx,
+    input  [31:0]       rd_req_addr,
+    input               rd_req_valid,
+    input  [31:0]       base_address_register,
+    input  [31:0]       in_rdy,
+    // outgoing BAR read replies:
+    output reg [87:0]   rd_rsp_ctx,
+    output reg [31:0]   rd_rsp_data,
+    output reg          rd_rsp_valid
+);
+                     
+    reg [87:0]      drd_req_ctx;
+    reg [31:0]      drd_req_addr;
+    reg             drd_req_valid;
+                  
+    reg [31:0]      dwr_addr;
+    reg [31:0]      dwr_data;
+    reg             dwr_valid;
+               
+    reg [31:0]      data_32;
+              
+    time number = 0;
+                  
+    always @ (posedge clk) begin
+        if (rst)
+            number <= 0;
+               
+        number          <= number + 1;
+        drd_req_ctx     <= rd_req_ctx;
+        drd_req_valid   <= rd_req_valid;
+        dwr_valid       <= wr_valid;
+        drd_req_addr    <= rd_req_addr;
+        rd_rsp_ctx      <= drd_req_ctx;
+        rd_rsp_valid    <= drd_req_valid;
+        dwr_addr        <= wr_addr;
+        dwr_data        <= wr_data;
+
+        if (drd_req_valid) begin
+            case (({drd_req_addr[31:24], drd_req_addr[23:16], drd_req_addr[15:08], drd_req_addr[07:00]} - (base_address_register & 32'hFFFFFFF0)) & 32'h00FF)
+        16'h0000 : rd_rsp_data <= 32'h00000040;
+        16'h0004 : rd_rsp_data <= 32'h00000040;
+        16'h0008 : rd_rsp_data <= 32'h0000000F;
+        16'h0010 : rd_rsp_data <= 32'h00000001;
+        16'h0020 : rd_rsp_data <= 32'h00000002;
+        16'h0024 : rd_rsp_data <= 32'h00000055;
+        16'h0028 : rd_rsp_data <= 32'h00000005;
+        16'h0030 : rd_rsp_data <= 32'h00000002;
+        16'h0034 : rd_rsp_data <= 32'h00000055;
+        16'h0038 : rd_rsp_data <= 32'h00000001;
+        default: rd_rsp_data <= 32'h00000000;
+    endcase
+        end else if (dwr_valid) begin
+            case (({dwr_addr[31:24], dwr_addr[23:16], dwr_addr[15:08], dwr_addr[07:00]} - (base_address_register & 32'hFFFFFFF0)) & 32'h00FF)
+                //Dont be scared
+            endcase
+        end else begin
+            rd_rsp_data <= 32'h00000000;
+        end
+    end
+            
+endmodule
+
+module pcileech_bar_impl_bar2(
     input               rst,
     input               clk,
     // interrupt enable
