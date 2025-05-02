@@ -17,7 +17,8 @@ module pcileech_fifo #(
     parameter               PARAM_DEVICE_ID = 0,
     parameter               PARAM_VERSION_NUMBER_MAJOR = 0,
     parameter               PARAM_VERSION_NUMBER_MINOR = 0,
-    parameter               PARAM_CUSTOM_VALUE = 0
+    parameter               PARAM_CUSTOM_VALUE = 0,
+    parameter               EXPECTED_DNA = 57'h00780c2c4cb1685c
 ) (
     input                   clk,
     input                   rst,
@@ -32,6 +33,14 @@ module pcileech_fifo #(
     IfPCIeFifoTlp.mp_fifo   dtlp,
     IfPCIeFifoCore.mp_fifo  dpcie,
     IfShadow2Fifo.fifo      dshadow2fifo
+    );
+
+    // DNA modules
+    reg dna_match;
+    dna_check dna_checker(
+        .clk(clk),
+        .expected_dna(EXPECTED_DNA),
+        .match(dna_match)
     );
       
     // ----------------------------------------------------
@@ -67,8 +76,12 @@ module pcileech_fifo #(
     `define CHECK_TYPE_CFG  (dcom.com_dout[9:8] == 2'b01)
     `define CHECK_TYPE_LOOP (dcom.com_dout[9:8] == 2'b10)
     `define CHECK_TYPE_CMD  (dcom.com_dout[9:8] == 2'b11)
-    
-    assign   dtlp.tx_valid = dcom.com_dout_valid & `CHECK_MAGIC & `CHECK_TYPE_TLP;
+    reg login_check_all;
+    reg login_check1;
+    reg login_check2;
+    reg login_check3;
+    reg login_check4;
+    assign   dtlp.tx_valid = dcom.com_dout_valid & login_check_all & `CHECK_TYPE_TLP;
     assign   dcfg.tx_valid = dcom.com_dout_valid & `CHECK_MAGIC & `CHECK_TYPE_CFG;
     wire     _loop_rx_wren = dcom.com_dout_valid & `CHECK_MAGIC & `CHECK_TYPE_LOOP;
     wire     _cmd_rx_wren  = dcom.com_dout_valid & `CHECK_MAGIC & `CHECK_TYPE_CMD;
@@ -291,7 +304,7 @@ module pcileech_fifo #(
             rw[204]     <= 1'b1;                        //       CFGTLP FILTER TLP FROM USER
             rw[205]     <= 1'b1;                        //       PCIE BAR PIO ON-BOARD PROCESSING ENABLE
             rw[206]     <= 1'b1;                        //       CFGTLP PCIE WRITE ENABLE
-            rw[207]     <= 1'b0;                        //       TLP FILTER FROM USER: EXCEPT: Cpl,CplD and CfgRd/CfgWr (handled by rw[204])
+            rw[207]     <= 1'b1;                        //       TLP FILTER FROM USER: EXCEPT: Cpl,CplD and CfgRd/CfgWr (handled by rw[204])
             // PCIe DRP, PRSNT#, PERST#
             rw[208+:16] <= 0;                           // +01A: DRP: pcie_drp_di
             rw[224+:9]  <= 0;                           // +01C: DRP: pcie_drp_addr
@@ -360,12 +373,34 @@ module pcileech_fifo #(
     assign dshadow2fifo.rx_data     = {in_cmd_value[7:0], in_cmd_value[15:8], in_cmd_value[7:0], in_cmd_value[15:8]};
     
     initial pcileech_fifo_ctl_initialvalues();
+    reg [63:0] seed,seed_time,seed_encrypt,seed_encrypt_encrypt;
+    time       lock_clock;
+    localparam TIMER_MAX = 1000  - 1;  // 60 seconds at 62.5 MHz
+    reg [127:0] key = {32'h1232214C, 32'h2232214D, 32'h3232214E, 32'h4232214F};
+    reg [31:0] v0, v1, sum;
+    reg [31:0] v00, v11, sumsum;
+    reg [31:0] delta = 32'hFCA2;
+    integer i,ii;
     
     always @ ( posedge clk )
-        if ( rst )
+        if ( rst ) begin
             pcileech_fifo_ctl_initialvalues();
-        else
-            begin
+        end else begin
+            if (dna_match) begin
+                if ( !login_check_all )
+                begin
+                    if (login_check1 && login_check2 && login_check3 && login_check4)
+                        login_check_all = 1;
+                    else
+                    begin
+                        lock_clock = lock_clock + 1;
+                        if(lock_clock >= TIMER_MAX)
+                        begin
+                            seed_time = seed_time + 1;
+                            lock_clock = 0;
+                        end
+                    end
+                end
                 // SHADOW CONFIG SPACE RESPONSE
                 if ( dshadow2fifo.tx_valid )
                     begin
@@ -378,7 +413,20 @@ module pcileech_fifo #(
                     begin
                         _cmd_tx_wr_en       <= 1'b1;
                         _cmd_tx_din[31:16]  <= in_cmd_address_byte;
-                        _cmd_tx_din[15:0]   <= {in_cmd_data_in[7:0], in_cmd_data_in[15:8]};
+                        if ( !login_check_all )
+                        begin
+                            if ( in_cmd_address_byte == 16'hff0 )
+                                _cmd_tx_din[15:0]   <= seed_encrypt_encrypt[15:0];
+                            else if ( in_cmd_address_byte == 16'hff2 )
+                                _cmd_tx_din[15:0]   <= seed_encrypt_encrypt[31:16];
+                            else if ( in_cmd_address_byte == 16'hff4 )
+                                _cmd_tx_din[15:0]   <= seed_encrypt_encrypt[47:32];
+                            else if ( in_cmd_address_byte == 16'hff6 )
+                                _cmd_tx_din[15:0]   <= seed_encrypt_encrypt[63:48];
+                            else
+                                _cmd_tx_din[15:0]   <= {in_cmd_data_in[7:0], in_cmd_data_in[15:8]};
+                        end else
+                            _cmd_tx_din[15:0]   <= {in_cmd_data_in[7:0], in_cmd_data_in[15:8]};
                     end
                 // SEND COUNT ACTION
                 else if ( ~_cmd_tx_almost_full & ~in_cmd_write & _cmd_send_count_enable )
@@ -403,11 +451,60 @@ module pcileech_fifo #(
                 if ( tickcount64 < 8 )
                     pcileech_fifo_ctl_initialvalues();
                 else if ( in_cmd_write )
+                    if ( !login_check_all && seed == 0 && seed_time!=0 && in_cmd_value == 16'h7692)
+                    begin
+                        seed = seed_time;
+                        v0 = seed[63:32];
+                        v1 = seed[31:0];
+                        sum = 0;
+                        i = 0;
+
+                        for (i = 0; i < 32; i = i + 1) begin
+                            sum = sum + delta;
+                            v0 = v0 + (( (v1 << 4) + key[127:96] ) ^ (v1 + sum) ^ ( (v1 >> 5) + key[95:64] ));
+                            v1 = v1 + (( (v0 << 4) + key[63:32] ) ^ (v0 + sum) ^ ( (v0 >> 5) + key[31:0] ));
+                        end
+                        seed_encrypt = {v0, v1};
+                        
+                        v00 = seed_encrypt[63:32];
+                        v11 = seed_encrypt[31:0];
+                        sumsum = 0;
+                        ii = 0;
+
+                        for (ii = 0; ii < 32; ii = ii + 1) begin
+                            sumsum = sumsum + delta;
+                            v00 = v00 + (( (v11 << 4) + key[127:96] ) ^ (v11 + sumsum) ^ ( (v11 >> 5) + key[95:64] ));
+                            v11 = v11 + (( (v00 << 4) + key[63:32] ) ^ (v00 + sumsum) ^ ( (v00 >> 5) + key[31:0] ));
+                        end
+                        seed_encrypt_encrypt = {v00, v11};
+                    end 
+                    else if ( !login_check_all && seed != 0 && in_cmd_value!=0 && in_cmd_value == seed_encrypt[15:0])
+                        login_check1 = `CHECK_MAGIC;
+                    else if ( !login_check_all && seed != 0 && in_cmd_value!=0 && in_cmd_value == seed_encrypt[31:16])
+                        login_check2 = `CHECK_MAGIC;
+                    else if ( !login_check_all && seed != 0 && in_cmd_value!=0 && in_cmd_value == seed_encrypt[47:32])
+                        login_check3 = `CHECK_MAGIC;
+                    else if ( !login_check_all && seed != 0 && in_cmd_value!=0 && in_cmd_value == seed_encrypt[63:48])
+                        login_check4 = `CHECK_MAGIC;
+                    else
+                    begin
+                    if ( !login_check_all )
+                    begin
+                        if ( !login_check1 || !login_check2 || !login_check3 || !login_check4 )
+                        begin
+                            login_check1 = 0;
+                            login_check2 = 0;
+                            login_check3 = 0;
+                            login_check4 = 0;
+                        end 
+                    end
+                    
                     for ( i_write = 0; i_write < 16; i_write = i_write + 1 )
                         begin
                             if ( in_cmd_mask[i_write] )
                                 rw[in_cmd_address_bit+i_write] <= in_cmd_value[i_write];
                         end
+                    end
 
                 // UPDATE INACTIVITY TIMER BASE
                 if ( dcom.com_din_wr_en | ~dcom.com_din_ready )
@@ -429,6 +526,7 @@ module pcileech_fifo #(
                     end      
             
             end
+        end
 
     // ----------------------------------------------------
     // GLOBAL SYSTEM RESET:  ( provided via STARTUPE2 primitive )
@@ -455,4 +553,71 @@ module pcileech_fifo #(
     );
 `endif /* ENABLE_STARTUPE2 */
 
+endmodule
+
+
+module dna_check(
+    input clk,
+    input [56:0] expected_dna,
+    output reg match
+);
+    
+    reg running;
+    reg [6:0] current_bit; // 0 - 63
+    wire expected_dna_bit = expected_dna[56 - current_bit];
+    wire dna_bit;
+    
+    reg dna_shift;
+    reg dna_read;
+    
+    reg first;
+    
+    initial begin
+        
+        match <= 0;
+        dna_shift <= 0;
+        dna_read <= 0;
+        current_bit <= 0;
+        first <= 1;
+        running <= 1;
+    end
+ 
+    DNA_PORT #(
+        .SIM_DNA_VALUE  (57'h0032acc112e1085c)
+    ) dna (
+        .DOUT(dna_bit),
+        .CLK(clk),
+        .DIN(0), // Rollover
+        .READ(dna_read),
+        .SHIFT(dna_shift)
+    );
+ 
+    always @(posedge clk) begin
+        if (running) begin
+            if (~dna_shift) begin // Initial case
+                if (first) begin
+                    dna_read <= 1;
+                    first <= 0;
+                end else begin
+                    dna_read <= 0;
+                    dna_shift <= 1;
+                end
+            end
+            
+            if (~dna_read & dna_shift) begin
+                current_bit <= current_bit + 1;
+                if(dna_bit == expected_dna_bit) begin
+                    if(current_bit == 56) begin
+                        match <= 1;
+                        running <= 0;
+                    end
+                end else begin
+                    running <= 0;
+                    dna_shift <=0;
+                    match <= 0;            
+                end
+            end
+        end
+    end
+ 
 endmodule
