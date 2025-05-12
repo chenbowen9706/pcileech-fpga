@@ -44,8 +44,9 @@ module pcileech_tlps128_bar_controller(
     input                   clk,
     input                   bar_en,
     input [15:0]            pcie_id,
-    input [31:0]            base_address_register,
-    input [31:0]            in_rdy,
+    input [31:0]            time_temp,
+    input [31:0]            int_count,
+    input [31:0]            timer_counter,
     output wire             int_enable,
     IfAXIS128.sink_lite     tlps_in,
     IfAXIS128.source        tlps_out
@@ -147,9 +148,10 @@ module pcileech_tlps128_bar_controller(
         .rd_req_ctx     ( rd_req_ctx                    ),
         .rd_req_addr    ( rd_req_addr                   ),
         .rd_req_valid   ( rd_req_valid && rd_req_bar[0] ),
-        .base_address_register ( base_address_register         ),
-        .in_rdy                ( in_rdy                 ),
-        .int_enable            ( int_enable                    ),
+        .int_enable     ( int_enable),
+        .time_temp                  ( time_temp     ),
+        .int_count                  ( int_count),
+        .timer_counter              ( timer_counter),
         .rd_rsp_ctx     ( bar_rsp_ctx[0]                ),
         .rd_rsp_data    ( bar_rsp_data[0]               ),
         .rd_rsp_valid   ( bar_rsp_valid[0]              )
@@ -861,6 +863,11 @@ endmodule
 `define ERDP_EHB        1<<3
 
 `define TRB_SIZE 16
+`define PLS_U0              0
+`define PLS_U1              1
+`define PLS_U2              2
+`define PLS_U3              3
+
 module pcileech_bar_impl_bar(
     input               rst,
     input               clk,
@@ -875,8 +882,9 @@ module pcileech_bar_impl_bar(
     input  [87:0]       rd_req_ctx,
     input  [31:0]       rd_req_addr,
     input               rd_req_valid,
-    input  [31:0]       base_address_register,
-    input  [31:0]       in_rdy,
+    input [31:0]        time_temp,
+    input [31:0]        int_count,
+    input [31:0]        timer_counter,
     // outgoing BAR read replies:
     output reg [87:0]   rd_rsp_ctx,
     output reg [31:0]   rd_rsp_data,
@@ -890,7 +898,7 @@ module pcileech_bar_impl_bar(
     reg [31:0]      dwr_addr;
     reg [31:0]      val;
     reg             dwr_valid;
-    reg [31:0]      o_int;
+    reg       o_int;
                
     reg [31:0]      data_32;
               
@@ -944,117 +952,109 @@ module pcileech_bar_impl_bar(
     reg [31:0] erstba_high4;
     reg [31:0] erdp_low4;
     reg [31:0] erdp_high4;
+    //portsc
+    reg [31:0] old_pls;
+    reg [31:0] new_pls;
+    reg [31:0] old_portsc;
+    reg [31:0] portsc1;
+    reg [31:0] portsc2;
+    reg [31:0] portsc3;
+    reg [31:0] portsc4;
+    reg [31:0] portsc5;
     //
                   
     always @ (posedge clk) begin
         if (rst)
+        begin
             number <= 0;
+            usbsts <= `USBSTS_HCH;
+            portsc1 <= 32'h200;
+            portsc2 <= 32'h200;
+            portsc3 <= 32'h200;
+            portsc4 <= 32'h200;
+            portsc5 <= 32'h200;
+            
+        end
                
-        number          <= number + 1;
-        mfindex         <= mfindex + 1;
-        drd_req_ctx     <= rd_req_ctx;
-        drd_req_valid   <= rd_req_valid;
-        dwr_valid       <= wr_valid;
-        drd_req_addr    <= rd_req_addr;
-        rd_rsp_ctx      <= drd_req_ctx;
-        rd_rsp_valid    <= drd_req_valid;
-        dwr_addr        <= wr_addr;
-        val        <= wr_data;
-
+        
+        
+        
         if (drd_req_valid) begin
             case (({drd_req_addr[31:24], drd_req_addr[23:16], drd_req_addr[15:08], drd_req_addr[07:00]}) & 32'hFFFF)
-        16'h0000 : rd_rsp_data <= 32'h01100020;
-        16'h0004 : rd_rsp_data <= 32'h05000420;
-        16'h0008 : rd_rsp_data <= 32'hFC000031;
-        16'h000C : rd_rsp_data <= 32'h00E70004;
-        16'h0010 : rd_rsp_data <= 32'h002841EB;
-        16'h0014 : rd_rsp_data <= 32'h00000100;
-        16'h0018 : rd_rsp_data <= 32'h00000200;
-        16'h0020 : rd_rsp_data <= usbcmd;
-        16'h0024 : rd_rsp_data <= 32'h00000001;
-        16'h0028 : rd_rsp_data <= 32'h00000001;
-        16'h002c : rd_rsp_data <= o_int;
-        16'h0030 : rd_rsp_data <= base_address_register;
-        16'h0034 : rd_rsp_data <= dnctrl;
-        16'h0038 : rd_rsp_data <= crcr_low & ~32'he;
-        16'h003c : rd_rsp_data <= crcr_high;
-        16'h0050 : rd_rsp_data <= dcbaap_low;
-        16'h0054 : rd_rsp_data <= dcbaap_high;
-        16'h0058 : rd_rsp_data <= dconfig;
-        16'h00A0 : rd_rsp_data <= 32'h00000401;
-        16'h00A4 : rd_rsp_data <= 32'h40010000;
-        16'h00B0 : rd_rsp_data <= 32'h20000802;
-        16'h00B4 : rd_rsp_data <= 32'h20425355;
-        16'h00B8 : rd_rsp_data <= 32'h10060101;
-        16'h00C0 : rd_rsp_data <= 32'h01E00023;
-        16'h00D0 : rd_rsp_data <= 32'h03008C02;
-        16'h00D4 : rd_rsp_data <= 32'h20425355;
-        16'h00D8 : rd_rsp_data <= 32'h10000402;
-        16'h00E0 : rd_rsp_data <= 32'h00050134;
-        16'h0200 : rd_rsp_data <= mfindex / 125000;
+        16'h0000 : rd_rsp_data <= 32'h01000040;
+        16'h0004 : rd_rsp_data <= 32'h08001040;
+        16'h0008 : rd_rsp_data <= 32'h0000000F;
+        16'h000C : rd_rsp_data <= 32'h00000000;
+        16'h0010 : rd_rsp_data <= 32'h00080001;
+        16'h0014 : rd_rsp_data <= 32'h00002000;
+        16'h0018 : rd_rsp_data <= 32'h00001000;
+        16'h001c : rd_rsp_data <= 32'h00000000;
+        16'h0020 : rd_rsp_data <= 32'h02000402;
+        16'h0024 : rd_rsp_data <= 32'h20425355;
+        16'h0028 : rd_rsp_data <= 32'h00000405;
+        16'h002c : rd_rsp_data <= 32'h00000000;
+        16'h0030 : rd_rsp_data <= 32'h03000002;
+        16'h0034 : rd_rsp_data <= 32'h20425355;
+        16'h0038 : rd_rsp_data <= 32'h00000401;
+        16'h003c : rd_rsp_data <= 32'h00000000;
+        //oper
+        16'h0040 : rd_rsp_data <= usbcmd;
+        16'h0044 : rd_rsp_data <= usbsts;//
+        16'h0048 : rd_rsp_data <= 32'h00000001;
+        16'h004c : rd_rsp_data <= o_int;//
+        16'h0050 : rd_rsp_data <= time_temp;//
+        16'h0054 : rd_rsp_data <= dnctrl;
+        16'h0058 : rd_rsp_data <= crcr_low & ~32'he;
+        16'h005c : rd_rsp_data <= crcr_high;
+        16'h0060 : rd_rsp_data <= int_count;//
+        16'h0064 : rd_rsp_data <= timer_counter;//
+        16'h0068 : rd_rsp_data <= usbsts;//
+        16'h0070 : rd_rsp_data <= dcbaap_low;
+        16'h0074 : rd_rsp_data <= dcbaap_high;
+        16'h0078 : rd_rsp_data <= dconfig;
         //runtime
-        16'h0220 : rd_rsp_data <= iman1;
-        16'h0224 : rd_rsp_data <= imod1;
-        16'h0228 : rd_rsp_data <= erstsz1;
-        16'h022c : rd_rsp_data <= 0;
-        16'h0230 : rd_rsp_data <= erstba_low1;
-        16'h0234 : rd_rsp_data <= erstba_high1;
-        16'h0238 : rd_rsp_data <= erdp_low1;
-        16'h023c : rd_rsp_data <= erdp_high1;
+        16'h1000 : rd_rsp_data <= (mfindex / 125000) & 32'hFFFF;
+        16'h1020 : rd_rsp_data <= iman1;
+        16'h1024 : rd_rsp_data <= imod1;
+        16'h1028 : rd_rsp_data <= erstsz1;
+        16'h102c : rd_rsp_data <= 0;
+        16'h1030 : rd_rsp_data <= erstba_low1;
+        16'h1034 : rd_rsp_data <= erstba_high1;
+        16'h1038 : rd_rsp_data <= erdp_low1;
+        16'h103c : rd_rsp_data <= erdp_high1;
         //
-        16'h0240 : rd_rsp_data <= iman2;
-        16'h0244 : rd_rsp_data <= imod2;
-        16'h0248 : rd_rsp_data <= erstsz2;
-        16'h024c : rd_rsp_data <= 0;
-        16'h0250 : rd_rsp_data <= erstba_low2;
-        16'h0254 : rd_rsp_data <= erstba_high2;
-        16'h0258 : rd_rsp_data <= erdp_low2;
-        16'h025c : rd_rsp_data <= erdp_high2;
+        16'h1040 : rd_rsp_data <= iman2;
+        16'h1044 : rd_rsp_data <= imod2;
+        16'h1048 : rd_rsp_data <= erstsz2;
+        16'h104c : rd_rsp_data <= 0;
+        16'h1050 : rd_rsp_data <= erstba_low2;
+        16'h1054 : rd_rsp_data <= erstba_high2;
+        16'h1058 : rd_rsp_data <= erdp_low2;
+        16'h105c : rd_rsp_data <= erdp_high2;
         //
-        16'h0260 : rd_rsp_data <= iman3;
-        16'h0264 : rd_rsp_data <= imod3;
-        16'h0268 : rd_rsp_data <= erstsz3;
-        16'h026c : rd_rsp_data <= 0;
-        16'h0270 : rd_rsp_data <= erstba_low3;
-        16'h0274 : rd_rsp_data <= erstba_high3;
-        16'h0278 : rd_rsp_data <= erdp_low3;
-        16'h027c : rd_rsp_data <= erdp_high3;
+        16'h1060 : rd_rsp_data <= iman3;
+        16'h1064 : rd_rsp_data <= imod3;
+        16'h1068 : rd_rsp_data <= erstsz3;
+        16'h106c : rd_rsp_data <= 0;
+        16'h1070 : rd_rsp_data <= erstba_low3;
+        16'h1074 : rd_rsp_data <= erstba_high3;
+        16'h1078 : rd_rsp_data <= erdp_low3;
+        16'h107c : rd_rsp_data <= erdp_high3;
         //
-        16'h0280 : rd_rsp_data <= iman4;
-        16'h0284 : rd_rsp_data <= imod4;
-        16'h0288 : rd_rsp_data <= erstsz4;
-        16'h028c : rd_rsp_data <= 0;
-        16'h0290 : rd_rsp_data <= erstba_low4;
-        16'h0294 : rd_rsp_data <= erstba_high4;
-        16'h0298 : rd_rsp_data <= erdp_low4;
-        16'h029c : rd_rsp_data <= erdp_high4;
+        16'h1080 : rd_rsp_data <= iman4;
+        16'h1084 : rd_rsp_data <= imod4;
+        16'h1088 : rd_rsp_data <= erstsz4;
+        16'h108c : rd_rsp_data <= 0;
+        16'h1090 : rd_rsp_data <= erstba_low4;
+        16'h1094 : rd_rsp_data <= erstba_high4;
+        16'h1098 : rd_rsp_data <= erdp_low4;
+        16'h109c : rd_rsp_data <= erdp_high4;
         //
-        16'h0328 : rd_rsp_data <= 32'h000000A0;
-        16'h0420 : rd_rsp_data <= 32'h40000E63;
-        16'h0430 : rd_rsp_data <= 32'h000002A0;
-        16'h0440 : rd_rsp_data <= 32'h000002A0;
-        16'h0450 : rd_rsp_data <= 32'h000002A0;
-        16'h0460 : rd_rsp_data <= 32'h000002A0;
-        16'h0800 : rd_rsp_data <= 32'h01000401;
-        16'h0804 : rd_rsp_data <= 32'hC0010000;
-        16'h0810 : rd_rsp_data <= 32'h03010802;
-        16'h0814 : rd_rsp_data <= 32'h20425355;
-        16'h0818 : rd_rsp_data <= 32'h00000201;
-        16'h0830 : rd_rsp_data <= 32'h02000802;
-        16'h0834 : rd_rsp_data <= 32'h20425355;
-        16'h0838 : rd_rsp_data <= 32'h00190203;
-        16'h0850 : rd_rsp_data <= 32'h0000000A;
-        16'h0878 : rd_rsp_data <= 32'h00000080;
-        16'h10A0 : rd_rsp_data <= 32'h00000401;
-        16'h10A4 : rd_rsp_data <= 32'h40010000;
-        16'h10B0 : rd_rsp_data <= 32'h20000802;
-        16'h10B8 : rd_rsp_data <= 32'h10060101;
-        16'h10C0 : rd_rsp_data <= 32'h01E00023;
-        16'h10D0 : rd_rsp_data <= 32'h03008C02;
-        16'h10E0 : rd_rsp_data <= 32'h00050134;
-        16'h1224 : rd_rsp_data <= 32'h00000FA0;
-        16'h1238 : rd_rsp_data <= 32'h05A55008;
-        16'h1420 : rd_rsp_data <= 32'h40000E63;
+        16'h0440 : rd_rsp_data <= portsc1;
+        16'h0450 : rd_rsp_data <= portsc2;
+        16'h0460 : rd_rsp_data <= portsc3;
+        16'h0470 : rd_rsp_data <= portsc4;
+        16'h0480 : rd_rsp_data <= portsc5;
         default: rd_rsp_data <= 32'h00000000;
     endcase
         end else if (dwr_valid) begin
@@ -1063,7 +1063,7 @@ module pcileech_bar_impl_bar(
         16'h0020 :
         begin
             if ((val & `USBCMD_RS) && !(usbcmd & `USBCMD_RS)) begin
-                usbsts <=usbsts & ~`USBSTS_HCH;
+                usbsts <= usbsts & ~`USBSTS_HCH;
                 mfindex <= 0;
             end else if (!(val & `USBCMD_RS) && (usbcmd & `USBCMD_RS)) begin
                 usbsts <= usbsts | `USBSTS_HCH;
@@ -1129,7 +1129,7 @@ module pcileech_bar_impl_bar(
             end
             if (iman1 & `IMAN_IE)
             begin
-                o_int <= 2;
+                o_int <= 1;
             end
         end
         16'h0024 : 
@@ -1143,12 +1143,9 @@ module pcileech_bar_impl_bar(
             end
             if (iman1 & `IMAN_IE)
             begin
-                o_int <= 2;
+                o_int <= 1;
             end
         end
-        16'h0028 : rd_rsp_data <= 32'h00000001;
-        16'h002c : rd_rsp_data <= o_int;
-        16'h0030 : rd_rsp_data <= base_address_register;
         16'h0034 : dnctrl <= val & 32'hffff;
         16'h0038 : crcr_low <= (val & 32'hffffffcf) | (crcr_low & `CRCR_CRR);
         16'h003c :
@@ -1179,7 +1176,7 @@ module pcileech_bar_impl_bar(
             end
             if (iman1 & `IMAN_IE)
             begin
-                o_int <= 2;
+                o_int <= 1;
             end
         end
         16'h0224 : imod1 <= val;
@@ -1206,7 +1203,7 @@ module pcileech_bar_impl_bar(
 
             if (iman2 & `IMAN_IE)
             begin
-                o_int <= 2;
+                o_int <= 1;
             end
         end
         16'h0244 : imod2 <= val;
@@ -1233,7 +1230,7 @@ module pcileech_bar_impl_bar(
 
             if (iman3 & `IMAN_IE)
             begin
-                o_int <= 2;
+                o_int <= 1;
             end
         end
         16'h0264 : imod3 <= val;
@@ -1260,7 +1257,7 @@ module pcileech_bar_impl_bar(
 
             if (iman4 & `IMAN_IE)
             begin
-                o_int <= 2;
+                o_int <= 1;
             end
         end
         16'h0284 : imod4 <= val;
@@ -1275,7 +1272,172 @@ module pcileech_bar_impl_bar(
             erdp_low4 <= (val & ~`ERDP_EHB) | (erdp_low4 & `ERDP_EHB);
         end
         16'h029c : erdp_high4 <= val;
-        //
+        //portsc
+        16'h0420 :
+        begin
+            if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
+            begin
+                old_portsc <= portsc1;
+                old_portsc <= old_portsc & ~(val & (`PORTSC_CSC|`PORTSC_PEC|`PORTSC_WRC|`PORTSC_OCC|`PORTSC_PRC|`PORTSC_PLC|`PORTSC_CEC));
+                if (val & `PORTSC_LWS)
+                begin
+                    old_pls <= (portsc1 >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    new_pls <= (val >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    if( new_pls == `PLS_U0)
+                    begin
+                        if (old_pls != `PLS_U0)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                            old_portsc <= old_portsc | `PORTSC_PLC;
+                        end
+                    end
+                    else if( new_pls == `PLS_U3)
+                    begin
+                        if (old_pls < `PLS_U3)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                        end
+                    end
+                end
+                old_portsc <= old_portsc & ~(`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE);
+                old_portsc <= old_portsc | (val & (`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE));
+                portsc1 <=  old_portsc;
+            end
+        end
+        16'h0430 :
+        begin
+            if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
+            begin
+                old_portsc <= portsc2;
+                old_portsc <= old_portsc & ~(val & (`PORTSC_CSC|`PORTSC_PEC|`PORTSC_WRC|`PORTSC_OCC|`PORTSC_PRC|`PORTSC_PLC|`PORTSC_CEC));
+                if (val & `PORTSC_LWS)
+                begin
+                    old_pls <= (portsc2 >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    new_pls <= (val >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    if( new_pls == `PLS_U0)
+                    begin
+                        if (old_pls != `PLS_U0)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                            old_portsc <= old_portsc | `PORTSC_PLC;
+                        end
+                    end
+                    else if( new_pls == `PLS_U3)
+                    begin
+                        if (old_pls < `PLS_U3)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                        end
+                    end
+                end
+                old_portsc <= old_portsc & ~(`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE);
+                old_portsc <= old_portsc | (val & (`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE));
+                portsc2 <=  old_portsc;
+            end
+        end
+        16'h0440:
+        begin
+            if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
+            begin
+                old_portsc <= portsc3;
+                old_portsc <= old_portsc & ~(val & (`PORTSC_CSC|`PORTSC_PEC|`PORTSC_WRC|`PORTSC_OCC|`PORTSC_PRC|`PORTSC_PLC|`PORTSC_CEC));
+                if (val & `PORTSC_LWS)
+                begin
+                    old_pls <= (portsc3 >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    new_pls <= (val >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    if( new_pls == `PLS_U0)
+                    begin
+                        if (old_pls != `PLS_U0)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                            old_portsc <= old_portsc | `PORTSC_PLC;
+                        end
+                    end
+                    else if( new_pls == `PLS_U3)
+                    begin
+                        if (old_pls < `PLS_U3)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                        end
+                    end
+                end
+                old_portsc <= old_portsc & ~(`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE);
+                old_portsc <= old_portsc | (val & (`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE));
+                portsc3 <=  old_portsc;
+            end
+        end
+        16'h0450 : 
+         begin
+            if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
+            begin
+                old_portsc <= portsc4;
+                old_portsc <= old_portsc & ~(val & (`PORTSC_CSC|`PORTSC_PEC|`PORTSC_WRC|`PORTSC_OCC|`PORTSC_PRC|`PORTSC_PLC|`PORTSC_CEC));
+                if (val & `PORTSC_LWS)
+                begin
+                    old_pls <= (portsc4 >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    new_pls <= (val >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    if( new_pls == `PLS_U0)
+                    begin
+                        if (old_pls != `PLS_U0)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                            old_portsc <= old_portsc | `PORTSC_PLC;
+                        end
+                    end
+                    else if( new_pls == `PLS_U3)
+                    begin
+                        if (old_pls < `PLS_U3)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                        end
+                    end
+                end
+                old_portsc <= old_portsc & ~(`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE);
+                old_portsc <= old_portsc | (val & (`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE));
+                portsc4 <=  old_portsc;
+            end
+        end
+        16'h0460 : 
+         begin
+            if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
+            begin
+                old_portsc <= portsc5;
+                old_portsc <= old_portsc & ~(val & (`PORTSC_CSC|`PORTSC_PEC|`PORTSC_WRC|`PORTSC_OCC|`PORTSC_PRC|`PORTSC_PLC|`PORTSC_CEC));
+                if (val & `PORTSC_LWS)
+                begin
+                    old_pls <= (portsc5 >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    new_pls <= (val >> `PORTSC_PLS_SHIFT) & `PORTSC_PLS_MASK;
+                    if( new_pls == `PLS_U0)
+                    begin
+                        if (old_pls != `PLS_U0)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                            old_portsc <= old_portsc | `PORTSC_PLC;
+                        end
+                    end
+                    else if( new_pls == `PLS_U3)
+                    begin
+                        if (old_pls < `PLS_U3)
+                        begin
+                            old_portsc <= old_portsc & ~(`PORTSC_PLS_MASK << `PORTSC_PLS_SHIFT);
+                            old_portsc <= old_portsc | ((new_pls) & `PORTSC_PLS_MASK) << `PORTSC_PLS_SHIFT;
+                        end
+                    end
+                end
+                old_portsc <= old_portsc & ~(`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE);
+                old_portsc <= old_portsc | (val & (`PORTSC_PP|`PORTSC_WCE|`PORTSC_WDE|`PORTSC_WOE));
+                portsc5 <=  old_portsc;
+            end
+        end
             endcase
         end else begin
             rd_rsp_data <= 32'h00000000;

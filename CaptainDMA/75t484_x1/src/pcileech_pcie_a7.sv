@@ -32,6 +32,7 @@ module pcileech_pcie_a7(
     IfPCIeFifoCore.mp_pcie  dfifo_pcie,
     IfShadow2Fifo.shadow    dshadow2fifo
     );
+
     // ----------------------------------------------------------------------------
     // PCIe DEFINES AND WIRES
     // ----------------------------------------------------------------------------
@@ -47,13 +48,9 @@ module pcileech_pcie_a7(
     wire                    user_lnk_up;
     wire                    int_enable;
     reg int_temp;
-    reg int_assert;
-    reg [31:0] timer_counter;
-    reg [31:0] timer_counter2;
-    reg [31:0] int_count;
     reg [31:0] time_temp;
-    
-    
+    reg [31:0] timer_counter;
+    reg [31:0] int_count;
 	localparam TIMER_MAX = 60*62_500_000  - 1;  // 60 seconds at 62.5 MHz
 
 
@@ -77,6 +74,23 @@ module pcileech_pcie_a7(
         tickcount64_pcie_refclk <= tickcount64_pcie_refclk + 1;
     assign led_state = user_lnk_up || tickcount64_pcie_refclk[25];
 
+
+    always @(posedge clk_pcie) begin
+    if(!int_temp && !ctx.cfg_interrupt_rdy && int_enable) begin
+        if(timer_counter == TIMER_MAX)begin
+            int_temp <= 1;
+            timer_counter <= 0;
+            time_temp <= 0;
+            int_count <= int_count + 1;
+        end else begin
+            timer_counter = timer_counter + 1;
+        end
+    end else if(ctx.cfg_interrupt_rdy) begin
+        int_temp <= 0;
+    end
+ end
+
+
     // ----------------------------------------------------------------------------
     // PCIe CFG RX/TX <--> FIFO below
     // ----------------------------------------------------------------------------
@@ -89,8 +103,7 @@ module pcileech_pcie_a7(
         .ctx                        ( ctx                       ),
         .tlps_static                ( tlps_static.source        ),
         .pcie_id                    ( pcie_id                   ),   // -> [15:0]
-        .base_address_register      ( base_address_register     ),//anpanman
-        .int_enable                 ( int_enable )
+        .base_address_register      ( base_address_register     )//anpanman
     );
     
     // ----------------------------------------------------------------------------
@@ -115,8 +128,9 @@ module pcileech_pcie_a7(
         .dshadow2fifo               ( dshadow2fifo              ),
         .int_enable                 ( int_enable )               ,
         .pcie_id                    ( pcie_id                   ),  // <- [15:0]
-        .base_address_register      ( int_count     ),
-        .in_rdy                     ( timer_counter )
+        .time_temp                  ( ctx.cfg_interrupt_rdy     ),
+        .int_count                  ( int_temp),
+        .timer_counter              ( timer_counter)
     );
     
     pcileech_tlps128_dst64 i_pcileech_tlps128_dst64(
@@ -184,8 +198,10 @@ module pcileech_pcie_a7(
         .cfg_interrupt_rdy          ( ctx.cfg_interrupt_rdy             ),  // ->
         .cfg_interrupt_do           ( ctx.cfg_interrupt_do              ),  // -> [7:0]
         .cfg_interrupt_stat         ( ctx.cfg_interrupt_stat            ),  // <-
-        .cfg_interrupt_di           ( ctx.cfg_interrupt_di              ),  // <- [7:0]
+        .cfg_interrupt_di           ( ctx.cfg_interrupt_di             ),  // <- [7:0]
 
+
+        
         // pcie2_cfg_control
         .cfg_ds_bus_number          ( ctx.cfg_bus_number                ),  // <- [7:0]
         .cfg_ds_device_number       ( ctx.cfg_device_number             ),  // <- [4:0]

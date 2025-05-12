@@ -23,8 +23,9 @@ module pcileech_pcie_tlp_a7(
     IfShadow2Fifo.shadow    dshadow2fifo,
     output  wire            int_enable,
     input [15:0]            pcie_id,
-    input [31:0]            base_address_register,
-    input [31:0]            in_rdy  
+    input [31:0]            time_temp,
+    input [31:0]            int_count,
+    input [31:0]            timer_counter
     );
     
     IfAXIS128 tlps_bar_rsp();
@@ -41,8 +42,9 @@ module pcileech_pcie_tlp_a7(
         .bar_en                ( dshadow2fifo.bar_en    ),
         .int_enable            (int_enable),    
         .pcie_id               ( pcie_id                ),
-        .base_address_register ( base_address_register  ),
-        .in_rdy                ( in_rdy                 ),
+        .time_temp             ( time_temp     ),
+        .int_count             ( int_count),
+        .timer_counter         ( timer_counter ),
         .tlps_in               ( tlps_rx                ),
         .tlps_out              ( tlps_bar_rsp.source    )
     );
