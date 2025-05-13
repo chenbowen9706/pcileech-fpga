@@ -999,7 +999,7 @@ module pcileech_bar_impl_bar(
         16'h003c : rd_rsp_data <= 32'h00000000;
         //oper
         16'h0040 : rd_rsp_data <= usbcmd;
-        16'h0044 : rd_rsp_data <= usbsts;//
+        16'h0044 : rd_rsp_data <= 32'h00000001;
         16'h0048 : rd_rsp_data <= 32'h00000001;
         16'h004c : rd_rsp_data <= o_int;//
         16'h0050 : rd_rsp_data <= time_temp;//
@@ -1060,9 +1060,9 @@ module pcileech_bar_impl_bar(
         end else if (dwr_valid) begin
             case (({dwr_addr[31:24], dwr_addr[23:16], dwr_addr[15:08], dwr_addr[07:00]}) & 32'hFFFF)
         //oper
-        16'h0020 :
+        16'h0040 :
         begin
-            if ((val & `USBCMD_RS) && !(usbcmd & `USBCMD_RS)) begin
+            if ((val & `USBCMD_RS) && ((usbcmd & `USBCMD_RS) == 0) ) begin
                 usbsts <= usbsts & ~`USBSTS_HCH;
                 mfindex <= 0;
             end else if (!(val & `USBCMD_RS) && (usbcmd & `USBCMD_RS)) begin
@@ -1132,7 +1132,7 @@ module pcileech_bar_impl_bar(
                 o_int <= 1;
             end
         end
-        16'h0024 : 
+        16'h0044 : 
         begin
             usbsts <= ~(val & (`USBSTS_HSE|`USBSTS_EINT|`USBSTS_PCD|`USBSTS_SRE));
 
@@ -1146,9 +1146,9 @@ module pcileech_bar_impl_bar(
                 o_int <= 1;
             end
         end
-        16'h0034 : dnctrl <= val & 32'hffff;
-        16'h0038 : crcr_low <= (val & 32'hffffffcf) | (crcr_low & `CRCR_CRR);
-        16'h003c :
+        16'h0054 : dnctrl <= val & 32'hffff;
+        16'h0058 : crcr_low <= (val & 32'hffffffcf) | (crcr_low & `CRCR_CRR);
+        16'h005c :
         begin
         crcr_high <= val;
         if (crcr_low & (`CRCR_CA|`CRCR_CS) && (crcr_low & `CRCR_CRR)) begin
@@ -1156,11 +1156,11 @@ module pcileech_bar_impl_bar(
         end 
         crcr_low <=crcr_low & ~(`CRCR_CA | `CRCR_CS);
         end
-        16'h0050 : dcbaap_low <= val & 32'hffffffc0;
-        16'h0054 : dcbaap_high <= val;
-        16'h0058 : dconfig <= val & 32'hff;
+        16'h0070 : dcbaap_low <= val & 32'hffffffc0;
+        16'h0074 : dcbaap_high <= val;
+        16'h0078 : dconfig <= val & 32'hff;
         //runtime
-        16'h0220 : 
+        16'h1020 : 
         begin
             if (val & `IMAN_IP) 
             begin
@@ -1179,20 +1179,20 @@ module pcileech_bar_impl_bar(
                 o_int <= 1;
             end
         end
-        16'h0224 : imod1 <= val;
-        16'h0228 : erstsz1 <= val & 32'hffff;
-        16'h0230 : erstba_low1 <= val & 32'hfffffff0;
-        16'h0234 : erstba_high1 <= val;
-        16'h0238 :
+        16'h1024 : imod1 <= val;
+        16'h1028 : erstsz1 <= val & 32'hffff;
+        16'h1030 : erstba_low1 <= val & 32'hfffffff0;
+        16'h1034 : erstba_high1 <= val;
+        16'h1038 :
         begin
             if (val & `ERDP_EHB) begin
                 erdp_low1 <= erdp_low1 & ~`ERDP_EHB;
             end
             erdp_low1 <= (val & ~`ERDP_EHB) | (erdp_low1 & `ERDP_EHB);
         end
-        16'h023c : erdp_high1 <= val;
+        16'h103c : erdp_high1 <= val;
         //
-        16'h0240 : 
+        16'h1040 : 
         begin
             if (val & `IMAN_IP) 
             begin
@@ -1206,20 +1206,20 @@ module pcileech_bar_impl_bar(
                 o_int <= 1;
             end
         end
-        16'h0244 : imod2 <= val;
-        16'h0248 : erstsz2 <= val & 32'hffff;
-        16'h0250 : erstba_low2 <= val & 32'hfffffff0;
-        16'h0254 : erstba_high2 <= val;
-        16'h0258 : 
+        16'h1044 : imod2 <= val;
+        16'h1048 : erstsz2 <= val & 32'hffff;
+        16'h1050 : erstba_low2 <= val & 32'hfffffff0;
+        16'h1054 : erstba_high2 <= val;
+        16'h1058 : 
         begin
             if (val & `ERDP_EHB) begin
                 erdp_low2 <= erdp_low2 & ~`ERDP_EHB;
             end
             erdp_low2 <= (val & ~`ERDP_EHB) | (erdp_low2 & `ERDP_EHB);
         end
-        16'h025c : erdp_high2 <= val;
+        16'h105c : erdp_high2 <= val;
         //
-        16'h0260 :
+        16'h1060 :
         begin
             if (val & `IMAN_IP) 
             begin
@@ -1233,20 +1233,20 @@ module pcileech_bar_impl_bar(
                 o_int <= 1;
             end
         end
-        16'h0264 : imod3 <= val;
-        16'h0268 : erstsz3 <= val & 32'hffff;
-        16'h0270 : erstba_low3 <= val & 32'hfffffff0;
-        16'h0274 : erstba_high3 <= val;
-        16'h0278 :
+        16'h1064 : imod3 <= val;
+        16'h1068 : erstsz3 <= val & 32'hffff;
+        16'h1070 : erstba_low3 <= val & 32'hfffffff0;
+        16'h1074 : erstba_high3 <= val;
+        16'h1078 :
         begin
             if (val & `ERDP_EHB) begin
                 erdp_low3 <= erdp_low3 & ~`ERDP_EHB;
             end
             erdp_low3 <= (val & ~`ERDP_EHB) | (erdp_low3 & `ERDP_EHB);
         end
-        16'h027c : erdp_high3 <= val;
+        16'h107c : erdp_high3 <= val;
         //
-        16'h0280 : 
+        16'h1080 : 
         begin
             if (val & `IMAN_IP) 
             begin
@@ -1260,20 +1260,20 @@ module pcileech_bar_impl_bar(
                 o_int <= 1;
             end
         end
-        16'h0284 : imod4 <= val;
-        16'h0288 : erstsz4 <= val & 32'hffff;
-        16'h0290 : erstba_low4 <= val & 32'hfffffff0;
-        16'h0294 : erstba_high4 <= val;
-        16'h0298 : 
+        16'h1084 : imod4 <= val;
+        16'h1088 : erstsz4 <= val & 32'hffff;
+        16'h1090 : erstba_low4 <= val & 32'hfffffff0;
+        16'h1094 : erstba_high4 <= val;
+        16'h1098 : 
         begin
             if (val & `ERDP_EHB) begin
                 erdp_low4 <= erdp_low4 & ~`ERDP_EHB;
             end
             erdp_low4 <= (val & ~`ERDP_EHB) | (erdp_low4 & `ERDP_EHB);
         end
-        16'h029c : erdp_high4 <= val;
+        16'h109c : erdp_high4 <= val;
         //portsc
-        16'h0420 :
+        16'h0440 :
         begin
             if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
             begin
@@ -1306,7 +1306,7 @@ module pcileech_bar_impl_bar(
                 portsc1 <=  old_portsc;
             end
         end
-        16'h0430 :
+        16'h0450 :
         begin
             if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
             begin
@@ -1339,7 +1339,7 @@ module pcileech_bar_impl_bar(
                 portsc2 <=  old_portsc;
             end
         end
-        16'h0440:
+        16'h0460:
         begin
             if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
             begin
@@ -1372,7 +1372,7 @@ module pcileech_bar_impl_bar(
                 portsc3 <=  old_portsc;
             end
         end
-        16'h0450 : 
+        16'h0470 : 
          begin
             if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
             begin
@@ -1405,7 +1405,7 @@ module pcileech_bar_impl_bar(
                 portsc4 <=  old_portsc;
             end
         end
-        16'h0460 : 
+        16'h0480 : 
          begin
             if (!(val & `PORTSC_WPR)&&(val & `PORTSC_PR))
             begin

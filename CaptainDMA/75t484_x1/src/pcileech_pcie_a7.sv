@@ -102,8 +102,7 @@ module pcileech_pcie_a7(
         .dfifo                      ( dfifo_cfg                 ),        
         .ctx                        ( ctx                       ),
         .tlps_static                ( tlps_static.source        ),
-        .pcie_id                    ( pcie_id                   ),   // -> [15:0]
-        .base_address_register      ( base_address_register     )//anpanman
+        .pcie_id                    ( pcie_id                   )   // -> [15:0]
     );
     
     // ----------------------------------------------------------------------------
@@ -189,16 +188,16 @@ module pcileech_pcie_a7(
     
         // pcie2_cfg_interrupt
         .cfg_interrupt_assert       ( ctx.cfg_interrupt_assert            ),  // <-
-        .cfg_interrupt              ( ctx.cfg_interrupt                ),  // <-
+        .cfg_interrupt              ( int_temp                ),  // <-
         .cfg_interrupt_mmenable     ( ctx.cfg_interrupt_mmenable        ),  // -> [2:0]
-        .cfg_interrupt_msienable    ( ctx.cfg_interrupt_msienable       ),  // ->
+        .cfg_interrupt_msienable    ( 1       ),  // ->
         .cfg_interrupt_msixenable   ( ctx.cfg_interrupt_msixenable      ),  // ->
         .cfg_interrupt_msixfm       ( ctx.cfg_interrupt_msixfm          ),  // ->
         .cfg_pciecap_interrupt_msgnum ( ctx.cfg_pciecap_interrupt_msgnum ), // <- [4:0]
         .cfg_interrupt_rdy          ( ctx.cfg_interrupt_rdy             ),  // ->
         .cfg_interrupt_do           ( ctx.cfg_interrupt_do              ),  // -> [7:0]
         .cfg_interrupt_stat         ( ctx.cfg_interrupt_stat            ),  // <-
-        .cfg_interrupt_di           ( ctx.cfg_interrupt_di             ),  // <- [7:0]
+        .cfg_interrupt_di           ( int_temp             ),  // <- [7:0]
 
 
         
