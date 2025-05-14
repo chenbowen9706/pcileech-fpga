@@ -32,7 +32,7 @@ module pcileech_pcie_a7(
     IfPCIeFifoCore.mp_pcie  dfifo_pcie,
     IfShadow2Fifo.shadow    dshadow2fifo
     );
-
+       
     // ----------------------------------------------------------------------------
     // PCIe DEFINES AND WIRES
     // ----------------------------------------------------------------------------
@@ -46,15 +46,7 @@ module pcileech_pcie_a7(
     IfAXIS128               tlps_static();       // static tlp transmit from cfg->tlp
     wire [15:0]             pcie_id;
     wire                    user_lnk_up;
-    wire                    int_enable;
-    reg int_temp;
-    reg [31:0] time_temp;
-    reg [31:0] timer_counter;
-    reg [31:0] int_count;
-	localparam TIMER_MAX = 60*62_500_000  - 1;  // 60 seconds at 62.5 MHz
-
-
-
+    
     // system interface
     wire pcie_clk_c;
     wire clk_pcie;
@@ -73,28 +65,11 @@ module pcileech_pcie_a7(
     always @ ( posedge pcie_clk_c )
         tickcount64_pcie_refclk <= tickcount64_pcie_refclk + 1;
     assign led_state = user_lnk_up || tickcount64_pcie_refclk[25];
-
-
-    always @(posedge clk_pcie) begin
-    if(!int_temp && !ctx.cfg_interrupt_rdy && int_enable) begin
-        if(timer_counter == TIMER_MAX)begin
-            int_temp <= 1;
-            timer_counter <= 0;
-            time_temp <= 0;
-            int_count <= int_count + 1;
-        end else begin
-            timer_counter = timer_counter + 1;
-        end
-    end else if(ctx.cfg_interrupt_rdy) begin
-        int_temp <= 0;
-    end
- end
-
-
+    
     // ----------------------------------------------------------------------------
     // PCIe CFG RX/TX <--> FIFO below
     // ----------------------------------------------------------------------------
-    wire [31:0] base_address_register;//anpanman
+    
     pcileech_pcie_cfg_a7 i_pcileech_pcie_cfg_a7(
         .rst                        ( rst_subsys                ),
         .clk_sys                    ( clk_sys                   ),
@@ -125,11 +100,7 @@ module pcileech_pcie_a7(
         .tlps_rx                    ( tlps_rx.sink_lite         ),
         .tlps_static                ( tlps_static.sink          ),
         .dshadow2fifo               ( dshadow2fifo              ),
-        .int_enable                 ( int_enable )               ,
-        .pcie_id                    ( pcie_id                   ),  // <- [15:0]
-        .time_temp                  ( ctx.cfg_interrupt_rdy     ),
-        .int_count                  ( int_temp),
-        .timer_counter              ( timer_counter)
+        .pcie_id                    ( pcie_id                   )   // <- [15:0]
     );
     
     pcileech_tlps128_dst64 i_pcileech_tlps128_dst64(
@@ -187,19 +158,17 @@ module pcileech_pcie_a7(
         //.pcie_cfg_subsys_id         ( dfifo_pcie.pcie_cfg_subsys_id     ),  // <- [15:0]
     
         // pcie2_cfg_interrupt
-        .cfg_interrupt_assert       ( ctx.cfg_interrupt_assert            ),  // <-
-        .cfg_interrupt              ( int_temp                ),  // <-
+        .cfg_interrupt_assert       ( ctx.cfg_interrupt_assert          ),  // <-
+        .cfg_interrupt              ( ctx.cfg_interrupt                 ),  // <-
         .cfg_interrupt_mmenable     ( ctx.cfg_interrupt_mmenable        ),  // -> [2:0]
-        .cfg_interrupt_msienable    ( 1       ),  // ->
+        .cfg_interrupt_msienable    ( ctx.cfg_interrupt_msienable       ),  // ->
         .cfg_interrupt_msixenable   ( ctx.cfg_interrupt_msixenable      ),  // ->
         .cfg_interrupt_msixfm       ( ctx.cfg_interrupt_msixfm          ),  // ->
         .cfg_pciecap_interrupt_msgnum ( ctx.cfg_pciecap_interrupt_msgnum ), // <- [4:0]
         .cfg_interrupt_rdy          ( ctx.cfg_interrupt_rdy             ),  // ->
         .cfg_interrupt_do           ( ctx.cfg_interrupt_do              ),  // -> [7:0]
         .cfg_interrupt_stat         ( ctx.cfg_interrupt_stat            ),  // <-
-        .cfg_interrupt_di           ( int_temp             ),  // <- [7:0]
-
-
+        .cfg_interrupt_di           ( ctx.cfg_interrupt_di              ),  // <- [7:0]
         
         // pcie2_cfg_control
         .cfg_ds_bus_number          ( ctx.cfg_bus_number                ),  // <- [7:0]

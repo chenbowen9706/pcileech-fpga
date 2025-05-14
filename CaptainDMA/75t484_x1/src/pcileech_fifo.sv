@@ -376,10 +376,10 @@ module pcileech_fifo #(
     reg [63:0] seed,seed_time,seed_encrypt,seed_encrypt_encrypt;
     time       lock_clock;
     localparam TIMER_MAX = 1000  - 1;  // 60 seconds at 62.5 MHz
-    reg [127:0] key = {32'hA572ABCA, 32'h23345478, 32'hFFDCB218, 32'hCF1E2D22};
+    reg [127:0] key = {32'h1232214C, 32'h2232214D, 32'h3232214E, 32'h4232214F};
     reg [31:0] v0, v1, sum;
     reg [31:0] v00, v11, sumsum;
-    reg [31:0] delta = 32'h123124;
+    reg [31:0] delta = 32'hFCA2;
     integer i,ii;
     
     always @ ( posedge clk )

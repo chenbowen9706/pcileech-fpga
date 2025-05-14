@@ -21,11 +21,7 @@ module pcileech_pcie_tlp_a7(
     IfAXIS128.sink_lite     tlps_rx,
     IfAXIS128.sink          tlps_static,
     IfShadow2Fifo.shadow    dshadow2fifo,
-    output  wire            int_enable,
-    input [15:0]            pcie_id,
-    input [31:0]            time_temp,
-    input [31:0]            int_count,
-    input [31:0]            timer_counter
+    input [15:0]            pcie_id
     );
     
     IfAXIS128 tlps_bar_rsp();
@@ -36,17 +32,13 @@ module pcileech_pcie_tlp_a7(
     // ------------------------------------------------------------------------
     IfAXIS128 tlps_filtered();
     
-     pcileech_tlps128_bar_controller i_pcileech_tlps128_bar_controller(
-        .rst                   ( rst                    ),
-        .clk                   ( clk_pcie               ),
-        .bar_en                ( dshadow2fifo.bar_en    ),
-        .int_enable            (int_enable),    
-        .pcie_id               ( pcie_id                ),
-        .time_temp             ( time_temp     ),
-        .int_count             ( int_count),
-        .timer_counter         ( timer_counter ),
-        .tlps_in               ( tlps_rx                ),
-        .tlps_out              ( tlps_bar_rsp.source    )
+    pcileech_tlps128_bar_controller i_pcileech_tlps128_bar_controller(
+        .rst            ( rst                           ),
+        .clk            ( clk_pcie                      ),
+        .bar_en         ( dshadow2fifo.bar_en           ),
+        .pcie_id        ( pcie_id                       ),
+        .tlps_in        ( tlps_rx                       ),
+        .tlps_out       ( tlps_bar_rsp.source           )
     );
     
     pcileech_tlps128_cfgspace_shadow i_pcileech_tlps128_cfgspace_shadow(
